@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Chat — SockJS + STOMP</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Main app container */
+        .app {
+            display: flex;
+            width: 100%;
+            max-width: 1200px;
+            height: 90vh;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+
+        /* Sidebar styling */
+        .sidebar {
+            width: 280px;
+            background: linear-gradient(to bottom, #2c3e50, #34495e);
+            color: white;
+            padding: 25px 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar h1 {
+            font-size: 1.5rem;
+            margin-bottom: 25px;
+            color: #ecf0f1;
+            font-weight: 600;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            color: #bdc3c7;
+            font-weight: 500;
+        }
+
+        .sidebar input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: all 0.3s ease;
+        }
+
+        .sidebar input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .sidebar input:focus {
+            outline: none;
+            border-color: #3498db;
+            background-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        .controls {
+            display: flex;
+            margin-bottom: 25px;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 12px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            font-weight: 500;
+            flex: 1;
+            text-align: center;
+        }
+
+        #connectBtn {
+            background-color: #27ae60;
+            color: white;
+        }
+
+        #connectBtn:hover {
+            background-color: #219653;
+            transform: translateY(-1px);
+        }
+
+        #disconnectBtn {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        #disconnectBtn:hover {
+            background-color: #c0392b;
+            transform: translateY(-1px);
+        }
+
+        .rooms {
+            margin-bottom: 25px;
+        }
+
+        .muted {
+            color: #95a5a6;
+            margin-bottom: 10px;
+        }
+
+        .small {
+            font-size: 0.8rem;
+        }
+
+        .rooms button {
+            display: block;
+            width: 100%;
+            padding: 10px 12px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #ecf0f1;
+            border: none;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 0.85rem;
+            transition: background-color 0.2s;
+        }
+
+        .rooms button:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .sidebar hr {
+            opacity: 0.1;
+            margin: 15px 0;
+            border: none;
+            height: 1px;
+            background-color: white;
+        }
+
+        .sidebar code {
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+
+        /* Main content area */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 25px;
+        }
+
+        .main > div:first-child {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .main strong {
+            font-size: 1.3rem;
+            color: #2c3e50;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .meta {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+        }
+
+        /* Messages area */
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Sample messages for demonstration */
+        .message {
+            padding: 12px 15px;
+            border-radius: 8px;
+            max-width: 75%;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .message.own {
+            background-color: #e1f0fa;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.other {
+            background-color: white;
+            border: 1px solid #e9ecef;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 5px;
+            color: #7f8c8d;
+        }
+
+        .message-sender {
+            font-weight: 600;
+        }
+
+        .message-content {
+            font-size: 0.95rem;
+        }
+
+        /* Composer area */
+        .composer {
+            display: flex;
+            gap: 10px;
+        }
+
+        #content {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.3s;
+        }
+
+        #content:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+        }
+
+        #sendBtn {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        #sendBtn:hover {
+            background-color: #2980b9;
+        }
+
+        /* Status indicator */
+        #status {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.5px;
+            position: relative;
+            padding-left: 15px;
+        }
+
+        #status:before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #e74c3c;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .app {
+                flex-direction: column;
+                height: auto;
+            }
+
+            .sidebar {
+                width: 100%;
+                padding: 20px;
+            }
+
+            .main {
+                padding: 20px;
+            }
+
+            .message {
+                max-width: 90%;
+            }
+
+            body {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar">
+        <h1>Global Chat</h1>
+
+        <label for="username">Username</label>
+        <input id="username" placeholder="Your username" autocomplete="off" />
+
+        <div class="controls">
+            <button id="connectBtn" class="btn">Connect</button>
+            <button id="disconnectBtn" class="btn">Disconnect</button>
+        </div>
+
+        <div class="rooms">
+            <p class="muted small">Quick actions</p>
+            <button id="fetchHistory">Fetch latest 50 messages</button>
+            <button id="clearMessages">Clear UI</button>
+        </div>
+
+        <hr>
+        <p class="muted small">Connection status: <span id="status">DISCONNECTED</span></p>
+        <p class="muted small">STOMP endpoint: <code id="wsEndpoint">/chat</code></p>
+        <p class="muted small">Subscribe topic: <code id="topicPattern">/topic/global</code></p>
+    </aside>
+
+    <main class="main">
+        <div>
+            <div>
+                <strong id="roomLabel">Global Chat</strong>
+                <div class="meta" id="roomName">Everyone</div>
+            </div>
+            <div class="meta">Messages: <span id="msgCount">3</span></div>
+        </div>
+
+        <div id="messages" class="messages" aria-live="polite">
+            <!-- Sample messages for demonstration -->
+            <div class="message other">
+                <div class="message-header">
+                    <span class="message-sender">System</span>
+                    <span class="message-time">10:00 AM</span>
+                </div>
+                <div class="message-content">Welcome to Global Chat! Start a conversation with people around the world.</div>
+            </div>
+
+            <div class="message other">
+                <div class="message-header">
+                    <span class="message-sender">Alex</span>
+                    <span class="message-time">10:05 AM</span>
+                </div>
+                <div class="message-content">Hello everyone! How's your day going?</div>
+            </div>
+
+            <div class="message own">
+                <div class="message-header">
+                    <span class="message-sender">You</span>
+                    <span class="message-time">10:07 AM</span>
+                </div>
+                <div class="message-content">Hi Alex! My day is great. Just setting up this chat interface.</div>
+            </div>
+        </div>
+
+        <div class="composer">
+            <input id="content" placeholder="Type a message and press Enter or Send" autocomplete="off" />
+            <button id="sendBtn" class="btn">Send</button>
+        </div>
+    </main>
+</div>
+
+<!-- SockJS client -->
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+
+<!-- STOMP client for browsers -->
+<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+<script src="index.js"></script>
+</body>
+</html>
